@@ -140,7 +140,8 @@ export function parseReminderRequest(text: string): { text: string; at: Date } |
   const ampm = (timeMatch[3] || '').toLowerCase();
   if (ampm === 'pm' && hour < 12) hour += 12;
   if (ampm === 'am' && hour === 12) hour = 0;
-  const taskText = rest.replace(timeMatch[0], '').replace(/^(to|about)\s+/i, '').trim() || 'Reminder';
+  const taskText =
+    rest.replace(timeMatch[0], '').trim().replace(/^(to|about)\s+/i, '').trim() || 'Reminder';
   const at = new Date();
   at.setHours(hour, minute, 0, 0);
   if (/tomorrow/i.test(rest)) at.setDate(at.getDate() + 1);

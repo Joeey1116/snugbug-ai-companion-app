@@ -209,7 +209,9 @@ export default function ChatTab() {
       {item.role === 'assistant' && (
         <Text style={styles.bubbleName}>{companionName}</Text>
       )}
-      <Text style={styles.bubbleText}>{item.content}</Text>
+      <Text style={[styles.bubbleText, item.role === 'user' && styles.userBubbleText]}>
+        {item.content}
+      </Text>
       {item.demo ? <Text style={styles.demoTag}>Demo reply — connect Supabase for real answers</Text> : null}
     </View>
   );
@@ -350,6 +352,7 @@ const styles = StyleSheet.create({
   assistantBubble: { backgroundColor: '#1a1a1a', alignSelf: 'flex-start', borderWidth: 1, borderColor: '#2a2a2a' },
   bubbleName: { color: '#F5B544', fontSize: 12, fontWeight: '800', marginBottom: 4 },
   bubbleText: { color: '#ffffff', fontSize: 15, lineHeight: 22 },
+  userBubbleText: { color: '#000000' },
   demoTag: { color: '#888888', fontSize: 11, marginTop: 6, fontStyle: 'italic' },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
   emptyTitle: { color: '#ffffff', fontSize: 24, fontWeight: '800', marginTop: 20, textAlign: 'center' },

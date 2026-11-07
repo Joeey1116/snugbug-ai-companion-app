@@ -125,7 +125,7 @@ const styles = StyleSheet.create({
   lights: { position: 'absolute', top: 8, color: '#F5B544', fontSize: 12 },
   chair: { position: 'absolute', left: 10, bottom: 8, fontSize: 22 },
   garden: { marginTop: 16, alignItems: 'center' },
-  gardenText: { fontSize: 26 },
+  gardenText: { fontSize: 26, color: '#ffffff' },
   gardenSub: { color: '#888888', fontSize: 13, marginTop: 8 },
   section: { color: '#ffffff', fontSize: 18, fontWeight: '800', marginTop: 16, marginBottom: 10 },
   decoCard: { marginBottom: 10 },
