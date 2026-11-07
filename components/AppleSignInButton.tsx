@@ -14,7 +14,7 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Platform, StyleSheet, Text, TouchableOpacity } from 'react-native';
 import { router } from 'expo-router';
-import { supabase } from '../lib/supabase';
+import { isSupabaseConfigured, supabase } from '../lib/supabase';
 import { ensureProfile } from '../lib/profile';
 
 export function AppleSignInButton({ label }: { label: string }) {
@@ -37,6 +37,11 @@ export function AppleSignInButton({ label }: { label: string }) {
   }, []);
 
   if (!available) return null;
+
+  // No backend yet (demo build): hide Apple sign-in the same way the email
+  // form disables itself — otherwise it fires a fetch at a placeholder
+  // host and shows the same raw "hostname could not be found" error.
+  if (!isSupabaseConfigured()) return null;
 
   const handlePress = async () => {
     setError('');

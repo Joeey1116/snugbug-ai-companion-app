@@ -5,9 +5,21 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 const url = process.env.EXPO_PUBLIC_SUPABASE_URL?.trim();
 const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY?.trim();
 
+/**
+ * Placeholder values from eas.json (e.g. https://YOUR-PROJECT-REF.supabase.co)
+ * count as unconfigured. createClient accepts any well-formed URL without
+ * checking it resolves, so without this check the app believes a real
+ * backend exists: the sign-up form stays enabled and fires a fetch at a
+ * hostname that doesn't exist ("A server with the specified hostname
+ * could not be found"). The screens already disable themselves when
+ * isSupabaseConfigured() is false — this is what makes that work.
+ */
+const isPlaceholder = (value: string | undefined): boolean =>
+  !value || value.includes('YOUR-');
+
 let client: SupabaseClient | null = null;
 
-if (url && anonKey) {
+if (url && anonKey && !isPlaceholder(url) && !isPlaceholder(anonKey)) {
   try {
     client = createClient(url, anonKey, {
       auth: {
