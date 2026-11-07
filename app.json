@@ -1,0 +1,94 @@
+{
+  "expo": {
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#000000",
+        "foregroundImage": "./assets/icon.png"
+      },
+      "blockedPermissions": [
+        "com.google.android.gms.permission.AD_ID"
+      ],
+      "package": "com.beatrackfaminc.snugbug",
+      "permissions": [
+        "RECORD_AUDIO"
+      ],
+      "versionCode": 1000
+    },
+    "extra": {
+      "eas": {
+        "projectId": "00000000-0000-0000-0000-000000000000"
+      }
+    },
+    "icon": "./assets/icon.png",
+    "ios": {
+      "buildNumber": "1000",
+      "bundleIdentifier": "com.beatrackfaminc.snugbug",
+      "deploymentTarget": "16.4",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSMicrophoneUsageDescription": "Snugbug uses your microphone for voice calls with your companion.",
+        "NSUserNotificationsUsageDescription": "Snugbug sends you reminders you asked for and gentle check-ins from your companion.",
+        "UIBackgroundModes": [
+          "audio"
+        ],
+        "UIDesignRequiresCompatibility": false
+      },
+      "supportsTablet": true
+    },
+    "name": "Snugbug",
+    "orientation": "portrait",
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      "expo-web-browser",
+      "expo-apple-authentication",
+      [
+        "expo-audio",
+        {
+          "enableBackgroundPlayback": true,
+          "enableBackgroundRecording": false,
+          "microphonePermission": "Allow Snugbug to use your microphone for voice calls with your companion.",
+          "recordAudioAndroid": true
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#000000",
+          "icon": "./assets/notification-icon.png"
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 36,
+            "enableMinifyInReleaseBuilds": true,
+            "enableShrinkResourcesInReleaseBuilds": true,
+            "minSdkVersion": 24,
+            "targetSdkVersion": 36
+          },
+          "ios": {
+            "deploymentTarget": "16.4"
+          }
+        }
+      ],
+      [
+        "expo-tracking-transparency",
+        {
+          "userTrackingPermission": "This identifier is used to personalize your Snugbug experience. We run no ads and no third-party trackers — it stays off unless you turn it on."
+        }
+      ],
+      "./plugins/with-privacy-manifest",
+      "expo-asset"
+    ],
+    "scheme": "snugbug",
+    "slug": "snugbug-ai-app",
+    "userInterfaceStyle": "dark",
+    "version": "1.0.0",
+    "web": {
+      "bundler": "metro",
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}
