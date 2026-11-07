@@ -163,7 +163,7 @@ jobs:
             DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
             CODE_SIGN_STYLE=Manual \
             CODE_SIGN_IDENTITY="$DIST_SIGN_IDENTITY" \
-            PROVISIONING_PROFILE_SPECIFIER="Snugbug App Store" \
+            PROVISIONING_PROFILE_SPECIFIER="snugbug app" \
             DEVELOPMENT_TEAM="$APPLE_TEAM_ID"
 
       - name: Export the IPA
@@ -194,7 +194,7 @@ jobs:
             <key>provisioningProfiles</key>
             <dict>
               <key>com.beatrackfaminc.snugbug</key>
-              <string>Snugbug App Store</string>
+              <string>snugbug app</string>
             </dict>
           </dict>
           </plist>
