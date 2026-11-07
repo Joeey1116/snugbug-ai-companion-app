@@ -194,7 +194,7 @@ jobs:
             <key>provisioningProfiles</key>
             <dict>
               <key>com.beatrackfaminc.snugbug</key>
-              <string>snugbug app</string>
+              <string>SnugBug App</string>
             </dict>
           </dict>
           </plist>
