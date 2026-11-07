@@ -163,7 +163,7 @@ jobs:
             DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
             CODE_SIGN_STYLE=Manual \
             CODE_SIGN_IDENTITY="$DIST_SIGN_IDENTITY" \
-            PROVISIONING_PROFILE_SPECIFIER="snugbug app" \
+            PROVISIONING_PROFILE_SPECIFIER="SnugBug App" \
             DEVELOPMENT_TEAM="$APPLE_TEAM_ID"
 
       - name: Export the IPA
