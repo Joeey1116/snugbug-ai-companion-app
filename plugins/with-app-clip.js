@@ -11,12 +11,20 @@
  *     exists in the Developer portal ("SnugBug App Clip"). Do NOT change
  *     this ID: it must match the portal App ID exactly.
  *   - Its own AppDelegate.swift (plain React Native bridge, NO Expo
- *     modules — the clip links React + Hermes only, to stay small),
+ *     modules — the clip links React + Hermes only),
  *     Info.plist and entitlements under ios/SnugbugClip/.
  *   - Its own JS entry point, clip-entry.tsx at the repo root, bundled by
  *     the target's "Bundle React Native code and images" phase via the
  *     ENTRY_FILE build setting (the phase is a copy of the main target's
  *     Expo export:embed phase).
+ *
+ *   SIZE WARNING (Nov 10 2026): this clip is React Native, and Motivation's
+ *   identical RN clip came out 40 MB thinned — over Apple's 15 MB App Clip
+ *   limit (ITMS-90865). A React Native clip cannot fit under 15 MB; the
+ *   proven fix is rebuilding the clip as a tiny pure-SwiftUI app (as
+ *   Motivation did, commit b91aa4a). That rebuild is a separate decision —
+ *   do NOT try to slim this RN clip. Expect an ITMS-90865 rejection on the
+ *   first upload until the rebuild happens.
  *   - The main target gets an "Embed App Clips" phase + a dependency on
  *     the clip target, so `xcodebuild archive -scheme Snugbug` builds the
  *     clip and embeds it in the .app automatically.
@@ -29,7 +37,9 @@
  *                   distribution, including the Nov 6 distribution cert)
  *   - A matching 'SnugbugClip' target in the Podfile that installs React
  *     Native + Hermes only (no use_expo_modules! — no Expo modules in
- *     the clip, keeps it under the 15 MB App Clip limit).
+ *     the clip). NOTE: React Native in the clip is a KNOWN SIZE RISK —
+ *     Motivation's identical RN clip was 40 MB thinned vs the 15 MB App
+ *     Clip limit (ITMS-90865, Nov 10 2026); see SIZE WARNING above.
  *
  * Portal/ASC steps Joey must do before the clip will build are listed in
  * the header comment of .github/workflows/ios-build.yml.
@@ -156,6 +166,14 @@ const CLIP_ENTITLEMENTS = `<?xml version="1.0" encoding="UTF-8"?>
 <dict>
 \t<key>com.apple.developer.on-demand-install-capable</key>
 \t<true/>
+\t<key>com.apple.developer.parent-application-identifiers</key>
+\t<array>
+\t\t<string>$(AppIdentifierPrefix)com.beatrackfaminc.snugbug</string>
+\t</array>
+\t<key>com.apple.developer.associated-domains</key>
+\t<array>
+\t\t<string>applinks:beatrackfam.info</string>
+\t</array>
 </dict>
 </plist>
 `;
@@ -309,13 +327,17 @@ function withAppClipXcodeProject(config) {
       if (shell) shell.shellScript = mainBundleScript;
     }
 
-    // AppDelegate.swift into Sources + the clip group.
+    // AppDelegate.swift into Sources + the clip group. The clip group
+    // carries path = SnugbugClip, so file refs inside it MUST be bare
+    // basenames — a full 'SnugbugClip/...' path resolves doubled
+    // (SnugbugClip/SnugbugClip/...) and the build can't find the file
+    // (same bug as the main app's clip sources, Nov 10 2026).
     const clipGroup = project.addPbxGroup([], CLIP_TARGET_NAME, CLIP_TARGET_NAME);
-    project.addSourceFile('SnugbugClip/AppDelegate.swift', { target: clipUuid }, clipGroup.uuid);
+    project.addSourceFile('AppDelegate.swift', { target: clipUuid }, clipGroup.uuid);
     // Info.plist + entitlements are referenced by build settings only;
     // add them to the group so they show in the navigator.
-    project.addFile('SnugbugClip/Info.plist', clipGroup.uuid);
-    project.addFile('SnugbugClip/SnugbugClip.entitlements', clipGroup.uuid);
+    project.addFile('Info.plist', clipGroup.uuid);
+    project.addFile('SnugbugClip.entitlements', clipGroup.uuid);
     // Put the clip group under the project root group.
     const rootGroupUuid = project.getFirstProject().firstProject.mainGroup;
     if (objects.PBXGroup[rootGroupUuid]) {
@@ -346,9 +368,11 @@ function withAppClipXcodeProject(config) {
       }
     }
 
-    // --- "Embed App Clips" phase on the main target (dstSubfolderSpec 16
-    // is the App Clips folder inside the .app bundle). Inserted right
-    // after Resources so it runs before the bundle script / signing.
+    // --- "Embed App Clips" phase on the main target. dstPath MUST be
+    // explicit: dstSubfolderSpec 16 is the App Clips folder inside the
+    // .app bundle, but a phase with dstPath "" NEVER executes on the
+    // runner (the clip builds and signs, the phase is absent from the
+    // log, and the clip is missing from the archive).
     const embedPhaseUuid = project.generateUuid();
     if (!objects.PBXCopyFilesBuildPhase) objects.PBXCopyFilesBuildPhase = {};
     const productFileRef = objects.PBXNativeTarget[clipUuid].productReference;
@@ -362,7 +386,7 @@ function withAppClipXcodeProject(config) {
     objects.PBXCopyFilesBuildPhase[embedPhaseUuid] = {
       isa: 'PBXCopyFilesBuildPhase',
       buildActionMask: 2147483647,
-      dstPath: '""',
+      dstPath: '"$(CONTENTS_FOLDER_PATH)/AppClips"',
       dstSubfolderSpec: 16,
       files: [{ value: embedBfUuid, comment: 'SnugbugClip.app in Embed App Clips' }],
       name: '"Embed App Clips"',
