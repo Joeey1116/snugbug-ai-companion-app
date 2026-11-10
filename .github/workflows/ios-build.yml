@@ -4,9 +4,9 @@ name: Build iOS IPA (Snugbug)
 # macOS minutes when someone clicks "Run workflow" in the Actions tab.
 #
 # HUMAN PREREQUISITES (do these first, or the upload step will fail):
-#   1. In App Store Connect, create the app record for bundle ID
-#      com.beatrackfaminc.snugbug (this repo has no ASC app record yet —
-#      the TestFlight upload will fail until this exists).
+#   1. The App Store Connect app record for bundle ID
+#      com.beatrackfaminc.snugbug EXISTS ("SnugBug - AI Companion App",
+#      ASC ID 6831869577, verified Nov 10 2026).
 #   2. In Apple Developer / App Store Connect, create an API key and add
 #      these four repo secrets (Settings, Secrets and variables, Actions):
 #        ASC_API_KEY_ID, ASC_API_KEY_P8, ASC_API_ISSUER_ID, APPLE_TEAM_ID

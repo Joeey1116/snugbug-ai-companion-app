@@ -2,13 +2,9 @@ import StoreKit
 import SwiftUI
 
 // MARK: - App Store ID
-// TODO: Snugbug ASC ID — fill this in once the App Store Connect app record
-// for com.beatrackfaminc.snugbug exists (it does not yet — see the human
-// prerequisites in .github/workflows/ios-build.yml; the TestFlight upload
-// fails until the record exists). Do NOT guess an ID. Until this is the
-// real numeric App Store ID, the "Get the full app" overlay below has
-// nothing valid to show.
-private let appStoreID = "TODO: Snugbug ASC ID"
+// Snugbug's App Store Connect app record exists ("SnugBug - AI Companion
+// App", verified Nov 10 2026): App Store Connect ID 6831869577.
+private let appStoreID = "6831869577"
 
 // MARK: - Model
 
