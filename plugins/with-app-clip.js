@@ -1,50 +1,78 @@
 /**
- * with-app-clip — Expo config plugin that adds the Snugbug App Clip target.
+ * Expo config plugin: with-app-clip
  *
- * The iOS workflow runs `expo prebuild` on every build, which regenerates
- * ios/ from scratch — so a hand-added Xcode target would be wiped. This
- * plugin re-creates the App Clip target on every prebuild instead:
+ * Adds an iOS App Clip target to the generated Xcode project so it SURVIVES
+ * `expo prebuild` (ios/ is regenerated on every build — a hand-added Xcode
+ * target would be wiped). Registered in app.json.
  *
- *   - Target "SnugbugClip", product type App Clip
- *     (com.apple.product-type.application.on-demand-install-capable)
- *   - Bundle ID com.beatrackfaminc.snugbug.SnugBug — the App ID ALREADY
- *     exists in the Developer portal ("SnugBug App Clip"). Do NOT change
- *     this ID: it must match the portal App ID exactly.
- *   - Its own AppDelegate.swift (plain React Native bridge, NO Expo
- *     modules — the clip links React + Hermes only),
- *     Info.plist and entitlements under ios/SnugbugClip/.
- *   - Its own JS entry point, clip-entry.tsx at the repo root, bundled by
- *     the target's "Bundle React Native code and images" phase via the
- *     ENTRY_FILE build setting (the phase is a copy of the main target's
- *     Expo export:embed phase).
+ * Clip target: "SnugbugClip"
+ * Clip bundle ID: com.beatrackfaminc.snugbug.SnugBug
+ *   — the App ID ALREADY exists in the Developer portal (name: "SnugBug
+ *     App Clip"). Do NOT change this ID.
+ * Clip UI: plugins/app-clip/ClipApp.swift + ContentView.swift — a tiny,
+ *   dependency-free SwiftUI app (a few tappable sparks of encouragement +
+ *   Get the Full App overlay). It does NOT embed React Native: the first
+ *   clip shared the main target's pods and came out 40 MB thinned, over
+ *   Apple's 15 MB App Clip limit (ITMS-90865 hit Motivation's identical
+ *   RN clip, Nov 10 2026). A React Native clip cannot fit under 15 MB —
+ *   do NOT re-add RN to the clip target.
  *
- *   SIZE WARNING (Nov 10 2026): this clip is React Native, and Motivation's
- *   identical RN clip came out 40 MB thinned — over Apple's 15 MB App Clip
- *   limit (ITMS-90865). A React Native clip cannot fit under 15 MB; the
- *   proven fix is rebuilding the clip as a tiny pure-SwiftUI app (as
- *   Motivation did, commit b91aa4a). That rebuild is a separate decision —
- *   do NOT try to slim this RN clip. Expect an ITMS-90865 rejection on the
- *   first upload until the rebuild happens.
- *   - The main target gets an "Embed App Clips" phase + a dependency on
- *     the clip target, so `xcodebuild archive -scheme Snugbug` builds the
- *     clip and embeds it in the .app automatically.
- *   - Per-target provisioning profiles, because the workflow's archive
- *     step can no longer pass one PROVISIONING_PROFILE_SPECIFIER on the
- *     command line (that would override BOTH targets):
- *       main app -> "SnugBug App" (unchanged, same profile as before)
- *       clip     -> "SnugBug App Clip" (Joey: create this profile in the
- *                   Developer portal if it doesn't exist yet, App Store
- *                   distribution, including the Nov 6 distribution cert)
- *   - A matching 'SnugbugClip' target in the Podfile that installs React
- *     Native + Hermes only (no use_expo_modules! — no Expo modules in
- *     the clip). NOTE: React Native in the clip is a KNOWN SIZE RISK —
- *     Motivation's identical RN clip was 40 MB thinned vs the 15 MB App
- *     Clip limit (ITMS-90865, Nov 10 2026); see SIZE WARNING above.
+ * What the plugin does at prebuild time:
+ *   1. Writes ios/SnugbugClip/Info.plist + .entitlements
+ *      (parent-application-identifiers + on-demand-install-capable +
+ *      associated-domains applinks:beatrackfam.info AND
+ *      appclips:beatrackfam.info), the AppIcon asset catalog, and the two
+ *      SwiftUI source files.
+ *   2. Adds the SnugbugClip native target
+ *      (product type com.apple.product-type.application.on-demand-install-capable)
+ *      with Sources (ClipApp.swift + ContentView.swift), Frameworks
+ *      (StoreKit, for the App Store overlay), and Resources (the asset
+ *      catalog + shared PrivacyInfo.xcprivacy). No bundle script, no JS
+ *      entry, no pods for the clip.
+ *   3. Adds an "Embed App Clips" copy phase to the main target and makes the
+ *      main target depend on the clip, so `xcodebuild archive` of the main
+ *      scheme builds the clip and embeds it at AppClips/ inside the .app.
+ *   4. Sets the Release PROVISIONING_PROFILE_SPECIFIER per target in the
+ *      project (main -> "SnugBug App", clip -> "SnugBug App Clip"). This
+ *      MUST be per-target in the project: the workflow used to pass
+ *      PROVISIONING_PROFILE_SPECIFIER on the xcodebuild command line, which
+ *      would force the clip onto the main app's profile and fail signing.
+ *      The workflow no longer passes it; the effective signing of the main
+ *      target is unchanged (same Manual style, same profile, same
+ *      certificate identity).
  *
- * Portal/ASC steps Joey must do before the clip will build are listed in
- * the header comment of .github/workflows/ios-build.yml.
+ * PORTAL PREREQUISITE (Joey): the clip App ID already exists, but the
+ * provisioning profile "SnugBug App Clip" (App Store distribution, for the
+ * clip App ID above, including the Nov 6 Apple Distribution certificate)
+ * must exist in the Developer portal before the archive will sign. The
+ * workflow uses -allowProvisioningUpdates, so once the profile exists the
+ * build fetches it. If that profile is ever renamed, update
+ * CLIP_PROFILE_NAME below AND the ExportOptions.plist entry in
+ * .github/workflows/ios-build.yml to match, character for character.
+ *
+ * INVOCATION (Nov 10, 2026): the clip entitlements carry BOTH
+ * `applinks:beatrackfam.info` and `appclips:beatrackfam.info` (the
+ * `appclips:` mode is what App Store Connect checks when creating an
+ * Advanced App Clip Experience — `applinks:` alone was rejected with "This
+ * URL is not contained in your app's associated domains"). The AASA file on
+ * beatrackfam.info already has the `appclips` section (all five clip IDs).
+ * Remaining step after a fresh build ships these entitlements: create the
+ * App Clip Experience in App Store Connect under the parent app.
+ *
+ * OPEN ITEM: the clip's "Get the full app" overlay needs the Snugbug App
+ * Store ID (plugins/app-clip/ContentView.swift, `appStoreID`) — it is a
+ * clearly-marked TODO there. There is no ASC app record for
+ * com.beatrackfaminc.snugbug yet, so no ID exists to fill in; the
+ * TestFlight upload fails until Joey creates the record. Fill the ID in
+ * when the record exists — do NOT guess one.
+ *
+ * SIZE: App Clips must be under 15 MB thinned. The first (React Native)
+ * clip was 40 MB and Apple rejected it (ITMS-90865, Nov 10 2026). This
+ * SwiftUI clip has no RN runtime, no pods, and no JS bundle — the same
+ * shape as the main app's, Rewards', and Motivation's clips, which are a
+ * few MB.
  */
-const { withDangerousMod, withXcodeProject, withPodfile } = require('@expo/config-plugins');
+const { withXcodeProject, withDangerousMod, createRunOncePlugin } = require('@expo/config-plugins');
 const fs = require('fs');
 const path = require('path');
 
@@ -52,110 +80,84 @@ const CLIP_TARGET_NAME = 'SnugbugClip';
 const CLIP_BUNDLE_ID = 'com.beatrackfaminc.snugbug.SnugBug';
 const CLIP_PROFILE_NAME = 'SnugBug App Clip';
 const MAIN_PROFILE_NAME = 'SnugBug App';
-const CLIP_ENTRY_FILE = 'clip-entry.tsx';
-const CLIP_PRODUCT_TYPE = 'com.apple.product-type.application.on-demand-install-capable';
+const MAIN_TARGET_DIR = 'Snugbug';
 
-// ---------------------------------------------------------------------------
-// Files written under ios/SnugbugClip/
-// ---------------------------------------------------------------------------
-
-const APP_DELEGATE_SWIFT = `import React
-import UIKit
-
-/**
- * SnugbugClip AppDelegate — deliberately plain React Native, no Expo.
- *
- * The clip links React + Hermes only (see the Podfile target), so it uses
- * the classic RCTBridge / RCTRootView bootstrap instead of ExpoAppDelegate.
- * The JS entry point is clip-entry.tsx (module name "SnugbugClip"), a small
- * self-contained welcome screen — no router, no auth, no network, no AI
- * key needed. In Debug the bundle comes from Metro; in Release it is the
- * main.jsbundle embedded by the "Bundle React Native code and images"
- * build phase.
- */
-@main
-class AppDelegate: UIResponder, UIApplicationDelegate {
-  var window: UIWindow?
-  var bridge: RCTBridge?
-
-  func application(
-    _ application: UIApplication,
-    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
-  ) -> Bool {
-    let bridge = RCTBridge(delegate: self, launchOptions: launchOptions)
-    self.bridge = bridge
-
-    let rootView = RCTRootView(bridge: bridge, moduleName: "SnugbugClip", initialProperties: nil)
-    rootView.backgroundColor = UIColor.black
-
-    let window = UIWindow(frame: UIScreen.main.bounds)
-    window.rootViewController = UIViewController()
-    window.rootViewController?.view = rootView
-    window.makeKeyAndVisible()
-    self.window = window
-    return true
-  }
-}
-
-extension AppDelegate: RCTBridgeDelegate {
-  func sourceURL(for bridge: RCTBridge) -> URL? {
-#if DEBUG
-    return RCTBundleURLProvider.sharedSettings().jsBundleURL(forBundleRoot: "clip-entry")
-#else
-    return Bundle.main.url(forResource: "main", withExtension: "jsbundle")
-#endif
-  }
-}
-`;
+/** Contents.json for the clip's own AppIcon set: a single 1024x1024 icon,
+ *  exactly what Expo generates for the main app. Xcode derives the smaller
+ *  sizes at build time. Without its own icon set, App Store Connect
+ *  rejects the clip bundle (90022/90023/90713) — the clip is validated
+ *  as its own bundle. */
+const CLIP_APPICON_CONTENTS_JSON = JSON.stringify(
+  {
+    images: [
+      {
+        filename: 'App-Icon-1024x1024@1x.png',
+        idiom: 'universal',
+        platform: 'ios',
+        size: '1024x1024',
+      },
+    ],
+    info: { author: 'xcode', version: 1 },
+  },
+  null,
+  2
+);
 
 const CLIP_INFO_PLIST = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-\t<key>CFBundleDevelopmentRegion</key>
-\t<string>en</string>
-\t<key>CFBundleDisplayName</key>
-\t<string>Snugbug</string>
-\t<key>CFBundleExecutable</key>
-\t<string>$(EXECUTABLE_NAME)</string>
-\t<key>CFBundleIdentifier</key>
-\t<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
-\t<key>CFBundleInfoDictionaryVersion</key>
-\t<string>6.0</string>
-\t<key>CFBundleName</key>
-\t<string>$(PRODUCT_NAME)</string>
-\t<key>CFBundlePackageType</key>
-\t<string>APPL</string>
-\t<key>CFBundleShortVersionString</key>
-\t<string>$(MARKETING_VERSION)</string>
-\t<key>CFBundleVersion</key>
-\t<string>$(CURRENT_PROJECT_VERSION)</string>
-\t<key>LSApplicationQueriesSchemes</key>
-\t<array>
-\t\t<string>snugbug</string>
-\t</array>
-\t<key>LSRequiresIPhoneOS</key>
-\t<true/>
-\t<key>UILaunchScreen</key>
-\t<dict/>
-\t<key>UIRequiredDeviceCapabilities</key>
-\t<array>
-\t\t<string>arm64</string>
-\t</array>
-\t<key>UISupportedInterfaceOrientations</key>
-\t<array>
-\t\t<string>UIInterfaceOrientationPortrait</string>
-\t\t<string>UIInterfaceOrientationPortraitUpsideDown</string>
-\t</array>
-\t<key>UISupportedInterfaceOrientations~ipad</key>
-\t<array>
-\t\t<string>UIInterfaceOrientationPortrait</string>
-\t\t<string>UIInterfaceOrientationPortraitUpsideDown</string>
-\t\t<string>UIInterfaceOrientationLandscapeLeft</string>
-\t\t<string>UIInterfaceOrientationLandscapeRight</string>
-\t</array>
-\t<key>UIUserInterfaceStyle</key>
-\t<string>Dark</string>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>Snugbug</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleSignature</key>
+	<string>????</string>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>NSAppClip</key>
+	<dict>
+		<key>NSAppClipRequestEphemeralUserNotification</key>
+		<false/>
+		<key>NSAppClipRequestLocationConfirmation</key>
+		<false/>
+	</dict>
+	<key>UIRequiredDeviceCapabilities</key>
+	<array>
+		<string>arm64</string>
+	</array>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UILaunchScreen</key>
+	<dict/>
+	<key>UIUserInterfaceStyle</key>
+	<string>Dark</string>
 </dict>
 </plist>
 `;
@@ -164,290 +166,330 @@ const CLIP_ENTITLEMENTS = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-\t<key>com.apple.developer.on-demand-install-capable</key>
-\t<true/>
-\t<key>com.apple.developer.parent-application-identifiers</key>
-\t<array>
-\t\t<string>$(AppIdentifierPrefix)com.beatrackfaminc.snugbug</string>
-\t</array>
-\t<key>com.apple.developer.associated-domains</key>
-\t<array>
-\t\t<string>applinks:beatrackfam.info</string>
-\t\t<string>appclips:beatrackfam.info</string>
-\t</array>
+	<key>com.apple.developer.on-demand-install-capable</key>
+	<true/>
+	<key>com.apple.developer.parent-application-identifiers</key>
+	<array>
+		<string>$(AppIdentifierPrefix)com.beatrackfaminc.snugbug</string>
+	</array>
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:beatrackfam.info</string>
+		<string>appclips:beatrackfam.info</string>
+	</array>
 </dict>
 </plist>
 `;
 
 // ---------------------------------------------------------------------------
-// Mod 1: write the clip target's source files
+// Small pbxproj helpers (modeled on the expo-widgets plugin's approach).
 // ---------------------------------------------------------------------------
 
-function withAppClipFiles(config) {
-  return withDangerousMod(config, [
-    'ios',
-    async (config) => {
-      const clipDir = path.join(config.modRequest.platformProjectRoot, CLIP_TARGET_NAME);
-      fs.mkdirSync(clipDir, { recursive: true });
-      fs.writeFileSync(path.join(clipDir, 'AppDelegate.swift'), APP_DELEGATE_SWIFT);
-      fs.writeFileSync(path.join(clipDir, 'Info.plist'), CLIP_INFO_PLIST);
-      fs.writeFileSync(path.join(clipDir, 'SnugbugClip.entitlements'), CLIP_ENTITLEMENTS);
-      return config;
-    },
-  ]);
+/** Strip one layer of pbxproj quoting/escaping from a stored string value. */
+function unquote(value) {
+  const s = String(value ?? '');
+  if (s.length >= 2 && s.startsWith('"') && s.endsWith('"')) {
+    return s.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+  }
+  return s;
 }
 
-// ---------------------------------------------------------------------------
-// Mod 2: Xcode project — clip target, embed phase, per-target profiles
-// ---------------------------------------------------------------------------
-
-function stripQuotes(value) {
-  return String(value == null ? '' : value).replace(/^"(.*)"$/, '$1');
-}
-
-function findFileRef(objects, filePath) {
-  const refs = objects.PBXFileReference || {};
-  for (const key of Object.keys(refs)) {
-    if (/_comment$/.test(key)) continue;
-    const ref = refs[key];
-    if (ref && ref.path && stripQuotes(ref.path) === filePath) return key;
+function findFileRef(xcodeProject, wantedPath) {
+  const section = xcodeProject.pbxFileReferenceSection();
+  for (const key of Object.keys(section)) {
+    if (key.endsWith('_comment')) continue;
+    const ref = section[key];
+    if (ref && unquote(ref.path) === wantedPath) return key;
   }
   return null;
 }
 
-function withAppClipXcodeProject(config) {
-  return withXcodeProject(config, async (config) => {
-    const project = config.modResults;
-    const objects = project.hash.project.objects;
+/** Add a build file for an EXISTING file ref to one of the target's phases,
+ *  with its own PBXBuildFile uuid (Xcode creates one per target membership —
+ *  reusing the main target's build file uuid across targets is not valid). */
+function addSharedFileToPhase(xcodeProject, { fileRef, basename, group, targetUuid, addToPhase }) {
+  const buildFile = {
+    uuid: xcodeProject.generateUuid(),
+    fileRef,
+    basename,
+    group,
+    target: targetUuid,
+  };
+  xcodeProject.addToPbxBuildFileSection(buildFile);
+  addToPhase(buildFile);
+  return buildFile;
+}
 
-    // Idempotency guard: re-running prebuild on an existing ios/ dir.
-    if (project.pbxTargetByName(CLIP_TARGET_NAME)) {
-      return config;
+function getBuildPhaseByName(xcodeProject, targetUuid, isa, name) {
+  const target = xcodeProject.pbxNativeTargetSection()[targetUuid];
+  const section = xcodeProject.hash.project.objects[isa] || {};
+  for (const entry of target.buildPhases || []) {
+    const obj = section[entry.value];
+    if (obj && unquote(obj.name) === name) return obj;
+  }
+  return null;
+}
+
+function setReleaseProfileSpecifier(xcodeProject, targetUuid, profileName) {
+  const target = xcodeProject.pbxNativeTargetSection()[targetUuid];
+  if (!target) return;
+  const list = xcodeProject.pbxXCConfigurationList()[target.buildConfigurationList];
+  if (!list) return;
+  for (const cfg of list.buildConfigurations || []) {
+    const conf = xcodeProject.pbxXCBuildConfigurationSection()[cfg.value];
+    if (conf && conf.name === 'Release') {
+      conf.buildSettings.PROVISIONING_PROFILE_SPECIFIER = `"${profileName}"`;
     }
+  }
+}
 
-    const mainTarget = project.getFirstTarget();
-    const mainTargetUuid = mainTarget.uuid;
-    const mainTargetObj = objects.PBXNativeTarget[mainTargetUuid];
-
-    // The main target's bundle script, copied verbatim for the clip — it
-    // resolves ENTRY_FILE from the environment, and the clip target sets
-    // ENTRY_FILE=clip-entry.tsx as a build setting (see below).
-    let mainBundleScript = null;
-    const shellPhases = objects.PBXShellScriptBuildPhase || {};
-    for (const phase of mainTargetObj.buildPhases || []) {
-      const obj = shellPhases[phase.value];
-      if (obj && stripQuotes(obj.name || '') === 'Bundle React Native code and images') {
-        mainBundleScript = obj.shellScript;
-        break;
-      }
-    }
-    if (!mainBundleScript) {
-      throw new Error(
-        '[with-app-clip] Could not find the main target\'s "Bundle React Native code and images" phase to copy.',
+// ---------------------------------------------------------------------------
+// Mod 1: write the clip's Info.plist + entitlements into ios/ at prebuild.
+// ---------------------------------------------------------------------------
+const withAppClipFiles = (config) =>
+  withDangerousMod(config, [
+    'ios',
+    async (config) => {
+      const clipDir = path.join(config.modRequest.platformProjectRoot, CLIP_TARGET_NAME);
+      fs.mkdirSync(clipDir, { recursive: true });
+      fs.writeFileSync(path.join(clipDir, 'Info.plist'), CLIP_INFO_PLIST, 'utf8');
+      fs.writeFileSync(
+        path.join(clipDir, `${CLIP_TARGET_NAME}.entitlements`),
+        CLIP_ENTITLEMENTS,
+        'utf8'
       );
-    }
-
-    // Copy version / deployment target from the main target so the clip
-    // always ships the same version/build as the app.
-    const pickMain = (prop, fallback) => {
-      try {
-        const value = project.getBuildProperty(prop, 'Release', 'Snugbug');
-        return value == null || value === '' ? fallback : value;
-      } catch {
-        return fallback;
+      // The clip's own app icon (ASC validates the clip as its own bundle:
+      // no icon set -> 90022/90023/90713). Copy the main app icon into the
+      // clip's asset catalog; Xcode derives the smaller sizes at build
+      // time, exactly as for the main app's 1024-only set.
+      const iconSrc = config.icon
+        ? path.resolve(config.modRequest.projectRoot, config.icon)
+        : null;
+      const appiconDir = path.join(clipDir, 'Images.xcassets', 'AppIcon.appiconset');
+      fs.mkdirSync(appiconDir, { recursive: true });
+      if (iconSrc && fs.existsSync(iconSrc)) {
+        fs.copyFileSync(iconSrc, path.join(appiconDir, 'App-Icon-1024x1024@1x.png'));
       }
+      fs.writeFileSync(path.join(appiconDir, 'Contents.json'), CLIP_APPICON_CONTENTS_JSON, 'utf8');
+      // The clip's SwiftUI sources (plugins/app-clip/ templates — the
+      // source of truth; the generated copies are disposable).
+      const templatesDir = path.join(config.modRequest.projectRoot, 'plugins', 'app-clip');
+      for (const file of ['ClipApp.swift', 'ContentView.swift']) {
+        fs.copyFileSync(path.join(templatesDir, file), path.join(clipDir, file));
+      }
+      return config;
+    },
+  ]);
+
+// ---------------------------------------------------------------------------
+// Mod 3: add the App Clip target to the Xcode project.
+// ---------------------------------------------------------------------------
+const withAppClipXcodeProject = (config) =>
+  withXcodeProject(config, (config) => {
+    const xcodeProject = config.modResults;
+    const mainTargetUuid = xcodeProject.getFirstTarget().uuid;
+
+    // Idempotent: prebuild regenerates the project, but a second plugin pass
+    // on an already-modified project must not duplicate the target.
+    if (xcodeProject.findTargetKey(CLIP_TARGET_NAME)) return config;
+
+    const marketingVersion = config.ios?.version ?? config.version ?? '1.0';
+    const currentProjectVersion = config.ios?.buildNumber ?? '1';
+    const deploymentTarget = config.ios?.deploymentTarget ?? '16.4';
+
+    // --- Build configurations for the clip target ---
+    const commonSettings = {
+      PRODUCT_NAME: '"$(TARGET_NAME)"',
+      PRODUCT_BUNDLE_IDENTIFIER: `"${CLIP_BUNDLE_ID}"`,
+      INFOPLIST_FILE: `${CLIP_TARGET_NAME}/Info.plist`,
+      CODE_SIGN_ENTITLEMENTS: `"${CLIP_TARGET_NAME}/${CLIP_TARGET_NAME}.entitlements"`,
+      IPHONEOS_DEPLOYMENT_TARGET: `"${deploymentTarget}"`,
+      // Xcode requires the clip's UIDeviceFamily to EQUAL the parent app's
+      // (Universal 1,2 here) — iPhone-only '"1"' fails ValidateEmbeddedBinary
+      // at archive (Rewards run 50, Nov 10 2026). A universal clip must meet
+      // ASC's iPad rules: full icon set, all-four iPad orientations, and an
+      // iPad launch screen — all three are in the clip's Info.plist/icon set.
+      TARGETED_DEVICE_FAMILY: '"1,2"',
+      // The clip's own icon set (written by withAppClipFiles). Without
+      // this, the clip bundle has no icon at all (90022/90713).
+      ASSETCATALOG_COMPILER_APPICON_NAME: 'AppIcon',
+      SWIFT_VERSION: '5.0',
+      CLANG_ENABLE_MODULES: 'YES',
+      MARKETING_VERSION: `"${marketingVersion}"`,
+      CURRENT_PROJECT_VERSION: `"${currentProjectVersion}"`,
+      VERSIONING_SYSTEM: '"apple-generic"',
+      LD_RUNPATH_SEARCH_PATHS: ['"$(inherited)"', '"@executable_path/Frameworks"'],
+      OTHER_LDFLAGS: ['"$(inherited)"'],
     };
-    const marketingVersion = pickMain('MARKETING_VERSION', '1.0');
-    const currentProjectVersion = pickMain('CURRENT_PROJECT_VERSION', '1');
-    const deploymentTarget = pickMain('IPHONEOS_DEPLOYMENT_TARGET', '16.4');
-
-    // The xcode package's addTarget() silently skips the main -> new
-    // target dependency when the project has no PBXTargetDependency /
-    // PBXContainerItemProxy sections yet (a fresh Expo project has
-    // neither), so create them first.
-    if (!objects.PBXTargetDependency) objects.PBXTargetDependency = {};
-    if (!objects.PBXContainerItemProxy) objects.PBXContainerItemProxy = {};
-
-    // --- Create the clip target (as a plain app target first — the xcode
-    // package has no on-demand-install-capable type — then fix the
-    // product type). addTarget also adds the main -> clip dependency.
-    const clip = project.addTarget(CLIP_TARGET_NAME, 'application', CLIP_TARGET_NAME, CLIP_BUNDLE_ID);
-    const clipUuid = clip.uuid;
-    objects.PBXNativeTarget[clipUuid].productType = '"' + CLIP_PRODUCT_TYPE + '"';
-
-    // addTarget() stores the target name WITH quotes ("SnugbugClip"),
-    // which breaks pbxTargetByName()/updateBuildProperty() (they match
-    // the unquoted comment). Normalize to unquoted so the build-setting
-    // updates below actually land.
-    objects.PBXNativeTarget[clipUuid].name = CLIP_TARGET_NAME;
-    objects.PBXNativeTarget[clipUuid].productName = CLIP_TARGET_NAME;
-    objects.PBXNativeTarget[clipUuid + '_comment'] = CLIP_TARGET_NAME;
-
-    // --- Clip build settings (both Debug and Release).
-    const setClip = (prop, value) => project.updateBuildProperty(prop, value, null, CLIP_TARGET_NAME);
-    setClip('INFOPLIST_FILE', 'SnugbugClip/Info.plist');
-    setClip('CODE_SIGN_ENTITLEMENTS', 'SnugbugClip/SnugbugClip.entitlements');
-    setClip('ASSETCATALOG_COMPILER_APPICON_NAME', 'AppIcon');
-    setClip('SWIFT_VERSION', '5.0');
-    setClip('TARGETED_DEVICE_FAMILY', '"1,2"');
-    setClip('IPHONEOS_DEPLOYMENT_TARGET', deploymentTarget);
-    setClip('MARKETING_VERSION', marketingVersion);
-    setClip('CURRENT_PROJECT_VERSION', currentProjectVersion);
-    setClip('ENTRY_FILE', CLIP_ENTRY_FILE);
-    // App Clips ARE installed into the archive (Xcode default); the xcode
-    // package's addTarget sets SKIP_INSTALL=YES, which would drop the clip.
-    setClip('SKIP_INSTALL', 'NO');
-    setClip('PROVISIONING_PROFILE_SPECIFIER', '"' + CLIP_PROFILE_NAME + '"');
-
-    // --- Main target keeps its exact existing profile, now as a per-target
-    // setting (the workflow used to pass it on the command line, which
-    // would override BOTH targets — see the workflow comment).
-    project.updateBuildProperty(
-      'PROVISIONING_PROFILE_SPECIFIER',
-      '"' + MAIN_PROFILE_NAME + '"',
-      null,
-      'Snugbug',
+    const debugSettings = { ...commonSettings, SWIFT_OPTIMIZATION_LEVEL: '"-Onone"' };
+    const releaseSettings = {
+      ...commonSettings,
+      PROVISIONING_PROFILE_SPECIFIER: `"${CLIP_PROFILE_NAME}"`,
+    };
+    const xcConfigList = xcodeProject.addXCConfigurationList(
+      [
+        { name: 'Debug', isa: 'XCBuildConfiguration', buildSettings: debugSettings },
+        { name: 'Release', isa: 'XCBuildConfiguration', buildSettings: releaseSettings },
+      ],
+      'Release',
+      `Build configuration list for PBXNativeTarget "${CLIP_TARGET_NAME}"`
     );
 
-    // --- Clip build phases: Sources, Resources (shared AppIcon catalog),
-    // and the bundle script. The [CP] phases are added by `pod install`.
-    project.addBuildPhase([], 'PBXSourcesBuildPhase', 'Sources', clipUuid);
-    project.addBuildPhase([], 'PBXResourcesBuildPhase', 'Resources', clipUuid);
-    project.addBuildPhase([], 'PBXShellScriptBuildPhase', 'Bundle React Native code and images', clipUuid, {
-      shellPath: '/bin/sh',
-      shellScript: 'true',
-      alwaysOutOfDate: 1,
-      inputPaths: ['$(SRCROOT)/.xcode.env', '$(SRCROOT)/.xcode.env.local'],
+    // --- Product file + native target ---
+    const productFile = xcodeProject.addProductFile(CLIP_TARGET_NAME, {
+      basename: `${CLIP_TARGET_NAME}.app`,
+      group: 'Embed App Clips',
+      explicitFileType: 'wrapper.application',
+      settings: { ATTRIBUTES: ['RemoveHeadersOnCopy'] },
+      includeInIndex: 0,
+      path: `${CLIP_TARGET_NAME}.app`,
+      sourceTree: 'BUILT_PRODUCTS_DIR',
     });
-    // The parsed main script keeps its surrounding quotes (the pbxproj
-    // writer passes such values through as-is), but addBuildPhase would
-    // re-quote + re-escape it — producing a double-escaped script. So
-    // overwrite the phase's script in the hash with the raw parsed value.
-    for (const phase of objects.PBXNativeTarget[clipUuid].buildPhases || []) {
-      const shell = objects.PBXShellScriptBuildPhase && objects.PBXShellScriptBuildPhase[phase.value];
-      if (shell) shell.shellScript = mainBundleScript;
+    const targetUuid = xcodeProject.generateUuid();
+    const target = {
+      uuid: targetUuid,
+      pbxNativeTarget: {
+        isa: 'PBXNativeTarget',
+        name: CLIP_TARGET_NAME,
+        productName: CLIP_TARGET_NAME,
+        productReference: productFile.fileRef,
+        productType: '"com.apple.product-type.application.on-demand-install-capable"',
+        buildConfigurationList: xcConfigList.uuid,
+        buildPhases: [],
+        buildRules: [],
+        dependencies: [],
+      },
+    };
+    xcodeProject.addToPbxNativeTargetSection(target);
+
+    // Register the target on the project + TargetAttributes (as Xcode does).
+    xcodeProject.addToPbxProjectSection(target);
+    const project = xcodeProject.pbxProjectSection()[xcodeProject.getFirstProject().uuid];
+    if (!project.attributes.TargetAttributes) project.attributes.TargetAttributes = {};
+    project.attributes.TargetAttributes[targetUuid] = { LastSwiftMigration: 1250 };
+
+    // Building the main target builds the clip first. The fresh Expo
+    // project has no PBXTargetDependency / PBXContainerItemProxy sections
+    // at all, and xcode's addTargetDependency silently no-ops when they
+    // are missing — so create them first (this also affects the widgets
+    // plugin's dependency, which hits the same silent skip).
+    const objects = xcodeProject.hash.project.objects;
+    objects.PBXTargetDependency ??= {};
+    objects.PBXContainerItemProxy ??= {};
+    xcodeProject.addTargetDependency(mainTargetUuid, [targetUuid]);
+
+    // PBXGroup for the clip's own files (Info.plist + entitlements).
+    const { uuid: groupUuid } = xcodeProject.addPbxGroup(
+      ['Info.plist', `${CLIP_TARGET_NAME}.entitlements`],
+      CLIP_TARGET_NAME,
+      CLIP_TARGET_NAME
+    );
+    const groups = xcodeProject.hash.project.objects.PBXGroup;
+    Object.keys(groups).forEach((key) => {
+      if (groups[key].name === undefined && groups[key].path === undefined) {
+        xcodeProject.addToPbxGroup(groupUuid, key);
+      }
+    });
+
+    // --- Build phases for the clip target ---
+    // Sources: the clip's own SwiftUI files (written by withAppClipFiles).
+    // addSourceFile stores the full relative path, but the clip's PBXGroup
+    // already carries path = SnugbugClip, so the full path resolves
+    // doubled — use bare basenames in this group (same bug as the main
+    // clip's sources, Nov 10 2026).
+    xcodeProject.addBuildPhase([], 'PBXSourcesBuildPhase', 'Sources', targetUuid);
+    for (const swiftFile of ['ClipApp.swift', 'ContentView.swift']) {
+      const added = xcodeProject.addSourceFile(
+        `${CLIP_TARGET_NAME}/${swiftFile}`,
+        { target: targetUuid },
+        groupUuid
+      );
+      if (added && added.fileRef) {
+        const ref = xcodeProject.pbxFileReferenceSection()[added.fileRef];
+        if (ref) ref.path = `"${swiftFile}"`;
+      }
     }
 
-    // AppDelegate.swift into Sources + the clip group. The clip group
-    // carries path = SnugbugClip, so file refs inside it MUST be bare
-    // basenames — a full 'SnugbugClip/...' path resolves doubled
-    // (SnugbugClip/SnugbugClip/...) and the build can't find the file
-    // (same bug as the main app's clip sources, Nov 10 2026).
-    const clipGroup = project.addPbxGroup([], CLIP_TARGET_NAME, CLIP_TARGET_NAME);
-    project.addSourceFile('AppDelegate.swift', { target: clipUuid }, clipGroup.uuid);
-    // Info.plist + entitlements are referenced by build settings only;
-    // add them to the group so they show in the navigator.
-    project.addFile('Info.plist', clipGroup.uuid);
-    project.addFile('SnugbugClip.entitlements', clipGroup.uuid);
-    // Put the clip group under the project root group.
-    const rootGroupUuid = project.getFirstProject().firstProject.mainGroup;
-    if (objects.PBXGroup[rootGroupUuid]) {
-      objects.PBXGroup[rootGroupUuid].children.push({
-        value: clipGroup.uuid,
-        comment: CLIP_TARGET_NAME,
+    // Frameworks: StoreKit only (App Store overlay in ContentView).
+    xcodeProject.addBuildPhase([], 'PBXFrameworksBuildPhase', 'Frameworks', targetUuid);
+    xcodeProject.addFramework('StoreKit.framework', { target: targetUuid });
+    xcodeProject.addBuildPhase([], 'PBXResourcesBuildPhase', 'Resources', targetUuid);
+    const privacyRef = findFileRef(xcodeProject, `${MAIN_TARGET_DIR}/PrivacyInfo.xcprivacy`);
+    if (privacyRef) {
+      addSharedFileToPhase(xcodeProject, {
+        fileRef: privacyRef,
+        basename: 'PrivacyInfo.xcprivacy',
+        group: 'Resources',
+        targetUuid,
+        addToPhase: (f) => xcodeProject.addToPbxResourcesBuildPhase(f),
       });
     }
 
-    // The shared AppIcon asset catalog goes into the clip's Resources
-    // phase. addBuildPhase would reuse the main target's PBXBuildFile for
-    // it; create a separate one so each target owns its entry.
-    const imagesFileRef = findFileRef(objects, 'Snugbug/Images.xcassets');
-    if (imagesFileRef) {
-      const clipTargetObj = objects.PBXNativeTarget[clipUuid];
-      const resourcesPhase = (clipTargetObj.buildPhases || [])
-        .map((p) => objects.PBXResourcesBuildPhase && objects.PBXResourcesBuildPhase[p.value])
-        .find(Boolean);
-      if (resourcesPhase) {
-        const bfUuid = project.generateUuid();
-        objects.PBXBuildFile[bfUuid] = {
-          isa: 'PBXBuildFile',
-          fileRef: imagesFileRef,
-          fileRef_comment: 'Images.xcassets',
-        };
-        objects.PBXBuildFile[bfUuid + '_comment'] = 'Images.xcassets in Resources';
-        resourcesPhase.files.push({ value: bfUuid, comment: 'Images.xcassets in Resources' });
-      }
+    // The clip's own asset catalog (its app icon, written by
+    // withAppClipFiles) — into the clip's Resources phase so it lands in
+    // the clip bundle. addResourceFile can't be used here: it crashes in
+    // node-xcode's correctForResourcesPath when the project has no PBXGroup
+    // named "Resources" (Expo projects don't). So create the file ref with
+    // addFile and attach it to the phase the same way PrivacyInfo is.
+    const xcassetsFile = xcodeProject.addFile(
+      `${CLIP_TARGET_NAME}/Images.xcassets`,
+      groupUuid
+    );
+    if (xcassetsFile) {
+      // addFile stores the full relative path, but the clip's PBXGroup
+      // already carries path = SnugbugClip, so the full path resolves
+      // doubled (…/SnugbugClip/SnugbugClip/…) and actool can't find the
+      // AppIcon set (archive failed on this, Nov 10, 2026). The clip's
+      // other files use bare basenames in this group — match that.
+      const xcassetsRef = xcodeProject.pbxFileReferenceSection()[xcassetsFile.fileRef];
+      if (xcassetsRef) xcassetsRef.path = '"Images.xcassets"';
+      addSharedFileToPhase(xcodeProject, {
+        fileRef: xcassetsFile.fileRef,
+        basename: xcassetsFile.basename,
+        group: 'Resources',
+        targetUuid,
+        addToPhase: (f) => xcodeProject.addToPbxResourcesBuildPhase(f),
+      });
     }
 
-    // --- "Embed App Clips" phase on the main target. dstPath MUST be
-    // explicit: dstSubfolderSpec 16 is the App Clips folder inside the
-    // .app bundle, but a phase with dstPath "" NEVER executes on the
-    // runner (the clip builds and signs, the phase is absent from the
-    // log, and the clip is missing from the archive).
-    const embedPhaseUuid = project.generateUuid();
-    if (!objects.PBXCopyFilesBuildPhase) objects.PBXCopyFilesBuildPhase = {};
-    const productFileRef = objects.PBXNativeTarget[clipUuid].productReference;
-    const embedBfUuid = project.generateUuid();
-    objects.PBXBuildFile[embedBfUuid] = {
-      isa: 'PBXBuildFile',
-      fileRef: productFileRef,
-      fileRef_comment: 'SnugbugClip.app',
-    };
-    objects.PBXBuildFile[embedBfUuid + '_comment'] = 'SnugbugClip.app in Embed App Clips';
-    objects.PBXCopyFilesBuildPhase[embedPhaseUuid] = {
-      isa: 'PBXCopyFilesBuildPhase',
-      buildActionMask: 2147483647,
-      dstPath: '"$(CONTENTS_FOLDER_PATH)/AppClips"',
-      dstSubfolderSpec: 16,
-      files: [{ value: embedBfUuid, comment: 'SnugbugClip.app in Embed App Clips' }],
-      name: '"Embed App Clips"',
-      runOnlyForDeploymentPostprocessing: 0,
-    };
-    objects.PBXCopyFilesBuildPhase[embedPhaseUuid + '_comment'] = 'Embed App Clips';
-    const embedEntry = { value: embedPhaseUuid, comment: 'Embed App Clips' };
-    const mainPhases = mainTargetObj.buildPhases;
-    const resourcesIdx = mainPhases.findIndex((p) => p.comment === 'Resources');
-    if (resourcesIdx >= 0) {
-      mainPhases.splice(resourcesIdx + 1, 0, embedEntry);
-    } else {
-      mainPhases.push(embedEntry);
+    // --- Embed the clip in the main app ---
+    if (!xcodeProject.pbxBuildFileSection()[productFile.uuid]) {
+      xcodeProject.addToPbxBuildFileSection(productFile);
+    }
+    xcodeProject.addBuildPhase(
+      [],
+      'PBXCopyFilesBuildPhase',
+      'Embed App Clips',
+      mainTargetUuid,
+      'dynamic_library',
+      '"$(CONTENTS_FOLDER_PATH)/AppClips"'
+    );
+    const embedPhase = getBuildPhaseByName(
+      xcodeProject,
+      mainTargetUuid,
+      'PBXCopyFilesBuildPhase',
+      'Embed App Clips'
+    );
+    if (embedPhase && !embedPhase.files.some((f) => f.value === productFile.uuid)) {
+      embedPhase.files.push({
+        value: productFile.uuid,
+        comment: `${CLIP_TARGET_NAME}.app in Embed App Clips`,
+      });
     }
 
-    // TargetAttributes entry for the clip (matches the main target's).
-    const projectObj = objects.PBXProject[project.getFirstProject().uuid];
-    if (projectObj) {
-      if (!projectObj.attributes) projectObj.attributes = {};
-      if (!projectObj.attributes.TargetAttributes) projectObj.attributes.TargetAttributes = {};
-      projectObj.attributes.TargetAttributes[clipUuid] = { LastSwiftMigration: 1250 };
-    }
+    // --- Per-target Release profiles (see header: the workflow must NOT
+    // pass PROVISIONING_PROFILE_SPECIFIER on the command line, or it would
+    // force the clip onto the main app's profile). ---
+    setReleaseProfileSpecifier(xcodeProject, mainTargetUuid, MAIN_PROFILE_NAME);
+    setReleaseProfileSpecifier(xcodeProject, targetUuid, CLIP_PROFILE_NAME);
 
     return config;
   });
-}
 
-// ---------------------------------------------------------------------------
-// Mod 3: Podfile — React Native + Hermes only for the clip target
-// ---------------------------------------------------------------------------
-
-function withAppClipPodfile(config) {
-  return withPodfile(config, (config) => {
-    // NOTE: for the Podfile mod, modResults is NOT the file text — it is
-    // { path, contents, language } (Paths.getFileInfo), and the writer
-    // writes modResults.contents back. Editing modResults itself (a
-    // string replace on the object) silently does nothing.
-    const podfile = config.modResults && config.modResults.contents;
-    if (typeof podfile !== 'string') return config;
-    if (podfile.includes("target 'SnugbugClip'")) return config;
-    const clipBlock = `
-target 'SnugbugClip' do
-  use_react_native!(
-    :path => File.join(__dir__, '..', 'node_modules', 'react-native'),
-    :hermes_enabled => podfile_properties['expo.jsEngine'] == nil || podfile_properties['expo.jsEngine'] == 'hermes',
-    :app_path => "#{Pod::Config.instance.installation_root}/..",
-    :privacy_file_aggregation_enabled => podfile_properties['apple.privacyManifestAggregationEnabled'] != 'false',
-  )
-end
-`;
-    config.modResults.contents = podfile.replace(/\n$/, '') + '\n' + clipBlock;
-    return config;
-  });
-}
-
-function withAppClip(config) {
+const withAppClip = (config) => {
   config = withAppClipFiles(config);
   config = withAppClipXcodeProject(config);
-  config = withAppClipPodfile(config);
   return config;
-}
+};
 
-module.exports = withAppClip;
+module.exports = createRunOncePlugin(withAppClip, 'with-app-clip', '1.0.0');
