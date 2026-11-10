@@ -10,6 +10,20 @@ name: Build iOS IPA (Snugbug)
 #   2. In Apple Developer / App Store Connect, create an API key and add
 #      these four repo secrets (Settings, Secrets and variables, Actions):
 #        ASC_API_KEY_ID, ASC_API_KEY_P8, ASC_API_ISSUER_ID, APPLE_TEAM_ID
+#   3. APP CLIP (bundle ID com.beatrackfaminc.snugbug.SnugBug — the App ID
+#      ALREADY exists in the Developer portal as "SnugBug App Clip"; do
+#      not create another one): a provisioning profile named exactly
+#      "SnugBug App Clip" must exist in the portal — App Store
+#      distribution, for that App ID, including the Nov 6 Apple
+#      Distribution certificate. If the Profiles tab shows a clip profile
+#      under a DIFFERENT name, rename the profile in the portal to
+#      "SnugBug App Clip" (or tell Gabi the exact name so the plugin's
+#      PROVISIONING_PROFILE_SPECIFIER can be updated). Until that profile
+#      exists, the archive step fails on the clip target. The plugin
+#      (plugins/with-app-clip.js) sets both profiles per-target in the
+#      project, so the archive step deliberately does NOT pass
+#      PROVISIONING_PROFILE_SPECIFIER on the command line — a command-line
+#      value would override BOTH targets with one profile.
 #
 # Pattern copied from the proven workflow in the main BeaTrackFam app repo
 # (Joeey1116/BeaTrackFam-Mobile-App/.github/workflows/ios-build.yml).
@@ -144,6 +158,14 @@ jobs:
         # Step-level cap: a healthy archive finishes well under this. If the
         # signing phase ever hangs again, this fails fast instead of burning
         # the whole job timeout in macOS minutes.
+        # The App Clip (SnugbugClip target, bundle ID
+        # com.beatrackfaminc.snugbug.SnugBug) is built and embedded by this
+        # same archive: plugins/with-app-clip.js adds it as a dependency of
+        # the main target plus an "Embed App Clips" phase, and sets the
+        # per-target provisioning profiles in the project ("SnugBug App"
+        # for the main app, "SnugBug App Clip" for the clip). Do NOT add a
+        # PROVISIONING_PROFILE_SPECIFIER here — a command-line value would
+        # override both targets with one profile and break the clip.
         timeout-minutes: 50
         env:
           ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
@@ -163,7 +185,6 @@ jobs:
             DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
             CODE_SIGN_STYLE=Manual \
             CODE_SIGN_IDENTITY="$DIST_SIGN_IDENTITY" \
-            PROVISIONING_PROFILE_SPECIFIER="SnugBug App" \
             DEVELOPMENT_TEAM="$APPLE_TEAM_ID"
 
       - name: Export the IPA
@@ -195,6 +216,8 @@ jobs:
             <dict>
               <key>com.beatrackfaminc.snugbug</key>
               <string>SnugBug App</string>
+              <key>com.beatrackfaminc.snugbug.SnugBug</key>
+              <string>SnugBug App Clip</string>
             </dict>
           </dict>
           </plist>

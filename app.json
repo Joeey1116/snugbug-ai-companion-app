@@ -80,6 +80,7 @@
         }
       ],
       "./plugins/with-privacy-manifest",
+      "./plugins/with-app-clip",
       "expo-asset"
     ],
     "scheme": "snugbug",
